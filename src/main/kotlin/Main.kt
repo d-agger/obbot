@@ -3,6 +3,7 @@ package org.teel.obbot
 import dev.kord.common.annotation.KordPreview
 import dev.kord.common.entity.*
 import dev.kord.core.cache.data.EmojiData
+import dev.kord.core.entity.Attachment
 import dev.kord.core.entity.GuildEmoji
 import dev.kord.core.event.message.MessageCreateEvent
 import kotlinx.coroutines.flow.toList
@@ -10,10 +11,6 @@ import me.jakejmattson.discordkt.arguments.IntegerArg
 import me.jakejmattson.discordkt.commands.commands
 import me.jakejmattson.discordkt.dsl.bot
 import me.jakejmattson.discordkt.dsl.listeners
-import me.jakejmattson.discordkt.extensions.addField
-import me.jakejmattson.discordkt.extensions.fullName
-import me.jakejmattson.discordkt.extensions.pfpUrl
-import me.jakejmattson.discordkt.extensions.profileLink
 import kotlin.system.exitProcess
 
 @KordPreview
@@ -45,48 +42,60 @@ fun cmdPins() = commands("pins") {
             val pins = channel.pinnedMessages.toList()
             val links = pins.map { "https://discord.com/channels/${context.guild?.id}/${channel.id}/${it.id}" }
             links.forEach { println(it) }
-            respond(
-                message = """
-                    |Total pins: ${links.size}
-                    |10 most recent:
-                    |${links.take(10).joinToString("\n")}
-                """.trimMargin().trimIndent()
-            )
+
+            val content = buildString {
+                appendLine("Total pins: ${links.size}")
+                appendLine("10 most recent:")
+                appendLine(links.take(10).joinToString("\n"))
+            }
+            respond(message = content)
         }
     }
     slash("pin_preview", requiredPermissions = Permissions(Permission.ManageMessages)) {
         execute(IntegerArg("index")) {
             val (first) = args
-
             val channel = context.channel
-            val pins = channel.pinnedMessages.toList()
-            val links = pins.map { "https://discord.com/channels/${context.guild?.id}/${channel.id}/${it.id}" }
 
+            val pins = channel.pinnedMessages.toList()
+            if (pins.isEmpty()) {
+                respondPublic("There are no pins")
+            }
             val pin = pins[first]
+
+            val links = pins.map { "https://discord.com/channels/${context.guild?.id}/${channel.id}/${it.id}" }
             val link = links[first]
 
-            val imgUrl = if (pin.embeds.isEmpty()) {
-                null
-            } else {
-                pin.embeds[0].image?.url
-            } ?: if (pin.attachments.isEmpty()) {
-                null
-            } else {
-                pin.attachments.first().url
-            }
+            val content = buildString {
+                appendLine("## ${pin.author?.username} -> $link")
+                appendLine(pin.content)
 
-            respondPublic {
-                addField("", link)
-                description = pin.content
-                image = imgUrl
-                author {
-                    name = pin.author?.fullName ?: pin.author?.username
-                    url = pin.author?.profileLink
-                    icon = pin.author?.pfpUrl
+                val videoAttachments = pin.attachments.filter { it.isVideo() }
+                videoAttachments.forEachIndexed { _, attachment ->
+                    appendLine(attachment.url)
+                }
+
+                val audioAttachments = pin.attachments.filter { it.isAudio() }
+                audioAttachments.forEachIndexed { _, attachment ->
+                    appendLine(attachment.url)
+                }
+
+                val otherAttachments = pin.attachments.filterNot { it.isVideo() }.filterNot { it.isAudio() }
+                otherAttachments.forEachIndexed { _, attachment ->
+                    appendLine(attachment.url)
                 }
             }
+
+            respondPublic(message = content)
         }
     }
+}
+
+fun Attachment.isVideo(): Boolean {
+    return this.contentType?.startsWith("video/") ?: false
+}
+
+fun Attachment.isAudio(): Boolean {
+    return this.contentType?.startsWith("audio/") ?: false
 }
 
 fun listenersFunny() = listeners {
