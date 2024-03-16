@@ -3,21 +3,20 @@ package org.teel.obbot
 import dev.kord.common.annotation.KordPreview
 import dev.kord.common.entity.*
 import dev.kord.core.cache.data.EmojiData
+import dev.kord.core.entity.Attachment
 import dev.kord.core.entity.GuildEmoji
 import dev.kord.core.event.message.MessageCreateEvent
+import dev.kord.rest.builder.message.EmbedBuilder
 import kotlinx.coroutines.flow.toList
 import me.jakejmattson.discordkt.arguments.IntegerArg
 import me.jakejmattson.discordkt.commands.commands
 import me.jakejmattson.discordkt.dsl.bot
 import me.jakejmattson.discordkt.dsl.listeners
-import me.jakejmattson.discordkt.extensions.addField
 import me.jakejmattson.discordkt.extensions.fullName
-import me.jakejmattson.discordkt.extensions.pfpUrl
-import me.jakejmattson.discordkt.extensions.profileLink
 import kotlin.system.exitProcess
 
 @KordPreview
-fun main(args: Array<String>) {
+fun main() {
     val token = System.getenv("BOT_TOKEN_HLVK")
 
     if (token == null) {
@@ -60,35 +59,47 @@ fun cmdPins() = commands("pins") {
 
             val channel = context.channel
             val pins = channel.pinnedMessages.toList()
-            val links = pins.map { "https://discord.com/channels/${context.guild?.id}/${channel.id}/${it.id}" }
+            val pin = pins.getOrNull(first)
 
-            val pin = pins[first]
-            val link = links[first]
+            if (pin != null) {
+                val link = "https://discord.com/channels/${context.guild?.id}/${channel.id}/${pin.id}"
 
-            val imgUrl = if (pin.embeds.isEmpty()) {
-                null
-            } else {
-                pin.embeds[0].image?.url
-            } ?: if (pin.attachments.isEmpty()) {
-                null
-            } else {
-                pin.attachments.first().url
-            }
+                val content = buildString {
+                    appendLine("**By: ${pin.author?.fullName}**")
+                    appendLine(pin.content)
 
-            respondPublic {
-                addField("", link)
-                description = pin.content
-                image = imgUrl
-                author {
-                    name = pin.author?.fullName ?: pin.author?.username
-                    url = pin.author?.profileLink
-                    icon = pin.author?.pfpUrl
+                    val videoAttachments = pin.attachments.filter { it.isVideo() }
+                    videoAttachments.forEachIndexed { index, attachment ->
+                        appendLine(attachment.url)
+                    }
+
+                    val mp3Attachments = pin.attachments.filter { it.isMp3() }
+                    mp3Attachments.forEachIndexed { index, attachment ->
+                        appendLine(attachment.url)
+                    }
+
+                    val otherAttachments = pin.attachments.filterNot { it.isVideo() }
+                    otherAttachments.forEachIndexed { index, attachment ->
+                        appendLine(attachment.url)
+                    }
+
+                    appendLine("Link: $link")
                 }
+                respondPublic(content)
+            } else {
+                respondPublic("Pin not found.")
             }
         }
     }
 }
 
+fun Attachment.isVideo(): Boolean {
+    return this.contentType!!.startsWith("video/")
+}
+
+fun Attachment.isMp3(): Boolean {
+    return this.contentType!!.lowercase() == "audio/mpeg"
+}
 fun listenersFunny() = listeners {
     on<MessageCreateEvent> {
         if (!message.content.lowercase().startsWith("good morning")) {
