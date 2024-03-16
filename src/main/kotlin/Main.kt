@@ -56,7 +56,7 @@ fun cmdPins() = commands("pins") {
     slash("pin_preview", requiredPermissions = Permissions(Permission.ManageMessages)) {
         execute(IntegerArg("index")) {
             val (first) = args
-
+//113
             val channel = context.channel
             val pins = channel.pinnedMessages.toList()
             val pin = pins.getOrNull(first)
