@@ -11,8 +11,9 @@
 | Help     | [Command] | Display a help menu. |
 | info     |           | Bot info for null    |
 
-## sample
-| Commands | Arguments     | Description               |
-|----------|---------------|---------------------------|
-| add      | first, second | Adds two numbers together |
+## pins
+| Commands    | Arguments | Description           |
+|-------------|-----------|-----------------------|
+| pin_preview | index     |                       |
+| pins        |           | Blows up planet Earth |
 
