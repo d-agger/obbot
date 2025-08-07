@@ -1,7 +1,6 @@
 from logging.handlers import TimedRotatingFileHandler
 from paths import LOGS_DIR
 import os
-import logging
 
 
 os.makedirs(LOGS_DIR, exist_ok=True)
