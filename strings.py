@@ -27,12 +27,15 @@ class ObStrings:
             self.__string = string
 
         def __call__(self, *args: Any) -> str:
-            return self.__string.format(*args)
+            try:
+                return self.__string.format(*args)
+            except Exception as e:
+                return ObStrings._strings_dict.get("ERROR_FORMATTING", "ERROR WHEN FORMATTING: {0}").format(e)
 
     class ErrorFormatter(Formatter):
         def __init__(self, error_key: str):
             super().__init__(
-                ObStrings._strings_dict.get("ERROR", "ERROR: MISSING STRING {0}").format(error_key)
+                ObStrings._strings_dict.get("ERROR_NOT_FOUND", "ERROR: MISSING STRING {0}").format(error_key)
             )
 
         def __call__(self, *args: Any) -> str:

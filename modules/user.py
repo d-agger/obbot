@@ -1,4 +1,6 @@
+import re
 from datetime import datetime
+from math import floor
 
 from discord import AllowedMentions
 from discord.ext.commands import Context
@@ -9,7 +11,7 @@ import country_converter as cc
 from db import ObDB, DbName
 from obbot import obbot
 from strings import ObStrings
-from util import is_ping, id_from_ping
+from util import is_mention, id_from_mention, mention, fancy_country_string, m_to_ft, ft_to_m
 
 with ObDB(DbName.USERS) as db:
     db.create_table(
@@ -28,7 +30,7 @@ async def user(ctx: Context):
 
 
 @user.command(name="birthday")
-async def command_birthday(ctx: Context, date: str | None):
+async def command_birthday(ctx: Context, param: str | None):
     """
     Commands for setting, checking and deleting your birthday.
 
@@ -38,55 +40,54 @@ async def command_birthday(ctx: Context, date: str | None):
     :ob user birthday <@id>            Gives you the birthday of user <@id>.
     """
     author = ctx.author
+    ping_id = id_from_mention(param) if is_mention(param) else None
 
-    if is_ping(date) or not date:
-        query_id = id_from_ping(date) if is_ping(date) else author.id
-        bday = None
+    if ping_id or not param:
+        query_id = ping_id or author.id
+        birthday = None
         with ObDB(DbName.USERS) as users_db:
-            bday = users_db.read(query_id, "birthday")
-            if bday is None:
-                await ctx.send(
-                    ObStrings().BIRTHDAY_NOT_SET_OTHER_USER(date)
-                    if is_ping(date) else
-                    ObStrings().BIRTHDAY_NOT_SET(author.mention),
-                    allowed_mentions=AllowedMentions(users=not is_ping(date))
-                )
-                return
+            birthday = users_db.read(query_id, "birthday")
+        if birthday is None:
+            await ctx.send(
+                ObStrings().INFO_NOT_SET_OTHER_USER(mention(ping_id), "birthday") if ping_id else
+                ObStrings().INFO_NOT_SET(author.mention, "birthday"),
+                allowed_mentions=AllowedMentions(users=ping_id is not None)
+            )
+            return
+        birthday = birthday.replace("-", " ")
         await ctx.send(
-            ObStrings().BIRTHDAY_PRINT_OTHER_USER(date, bday)
-            if is_ping(date) else
-            ObStrings().BIRTHDAY_PRINT(author.mention, bday),
-            allowed_mentions=AllowedMentions(users=not is_ping(date))
+            ObStrings().INFO_PRINT_OTHER_USER(mention(ping_id), "birthday", f"`{birthday}`") if ping_id else
+            ObStrings().INFO_PRINT(author.mention, "birthday", f"`{birthday}`"),
+            allowed_mentions=AllowedMentions(users=ping_id is not None)
         )
         return
 
-    if date == "delete":
+    if param == "delete":
         with ObDB(DbName.USERS) as users_db:
             users_db.upsert(author.id, birthday=None)
-        await ctx.send(ObStrings().BIRTHDAY_DELETE(author.mention))
+        await ctx.send(ObStrings().INFO_DELETE(author.mention, "birthday"))
         return
 
     birthday_date = None
     for fmt in ("%d-%b-%Y", "%d-%b-%y"):
         try:
-            birthday_date = datetime.strptime(date, fmt).date()
+            birthday_date = datetime.strptime(param, fmt).date()
         except ValueError:
             continue
     if birthday_date is None:
         await ctx.send(ObStrings().BIRTHDAY_WRONG_FORMAT(author.mention))
         return
-    birthday_date = birthday_date.strftime("%d-%b-%Y")
     with ObDB(DbName.USERS) as users_db:
-        users_db.upsert(author.id, birthday=birthday_date)
-    await ctx.send(ObStrings().BIRTHDAY_SET(author.mention, birthday_date))
+        users_db.upsert(author.id, birthday=birthday_date.strftime("%d-%b-%Y"))
+    await ctx.send(ObStrings().INFO_SET(author.mention, "birthday", f"`{birthday_date.strftime("%d %b %Y")}`"))
 
 
 @user.command(name="country")
-async def command_country(ctx: Context, *country: str | None):
+async def command_country(ctx: Context, *param: str | None):
     """
     Commands for setting, checking and deleting your country.
 
-    :ob user country
+    :ob user country              Gives you your country or tells you if you haven't set it yet.
     :ob user country [country]    Sets your country using its (English) name.
     :ob user country [code]       Sets your country using its country code (2-letter or 3-letter).
     :ob user country delete       Deletes your country from the database (sets it to NULL).
@@ -94,46 +95,115 @@ async def command_country(ctx: Context, *country: str | None):
     """
     author = ctx.author
 
-    if len(country) > 1:
-        if country[0] != "delete" and not is_ping(country[0]):
-            country = " ".join(country)
+    if len(param) > 1:
+        if param[0] != "delete" and not is_mention(param[0]):
+            param = " ".join(param)
         else:
             # Trim everything after one of the above non-country matching cases
-            country = country[0]
+            param = param[0]
 
-    if is_ping(country) or not country:
-        query_id = id_from_ping(country) if is_ping(country) else author.id
+    ping_id = id_from_mention(param) if is_mention(param) else None
+
+    if is_mention(param) or not param:
+        query_id = ping_id or author.id
         c_obj: Country
         with ObDB(DbName.USERS) as users_db:
             c_code = users_db.read(query_id, "country")
-            if c_code is None:
-                await ctx.send(
-                    ObStrings().COUNTRY_NOT_SET_OTHER_USER(country)
-                    if is_ping(country) else
-                    ObStrings().COUNTRY_NOT_SET(author.mention),
-                    allowed_mentions=AllowedMentions(users=not is_ping(country))
-                )
-                return
-            c_obj = countries.get(alpha_3=c_code)
+        if c_code is None:
+            await ctx.send(
+                ObStrings().INFO_NOT_SET_OTHER_USER(mention(ping_id), "country") if ping_id else
+                ObStrings().INFO_NOT_SET(author.mention, "country"),
+                allowed_mentions=AllowedMentions(users=ping_id is not None)
+            )
+            return
+        c_obj = countries.get(alpha_3=c_code)
+        c_str = fancy_country_string(c_obj)
         await ctx.send(
-            ObStrings().COUNTRY_PRINT_OTHER_USER(country, c_obj.flag, c_obj.name, c_obj.alpha_3)
-            if is_ping(country) else
-            ObStrings().COUNTRY_PRINT(author.mention, c_obj.flag, c_obj.name, c_obj.alpha_3),
-            allowed_mentions=AllowedMentions(users=not is_ping(country))
+            ObStrings().INFO_PRINT_OTHER_USER(mention(ping_id), "country", c_str) if ping_id else
+            ObStrings().INFO_PRINT(author.mention, "country", c_str),
+            allowed_mentions=AllowedMentions(users=ping_id is not None)
         )
         return
 
-    if country == "delete":
+    if param == "delete":
         with ObDB(DbName.USERS) as users_db:
             users_db.upsert(author.id, country=None)
-        await ctx.send(ObStrings().COUNTRY_DELETE(author.mention))
+        await ctx.send(ObStrings().INFO_DELETE(author.mention, "country"))
         return
 
-    c_code = cc.convert(country, to="ISO3")
+    c_code = cc.convert(param, to="ISO3")
     if c_code == "not found":
-        await ctx.send(ObStrings().COUNTRY_NOT_FOUND(author.mention, country))
+        await ctx.send(ObStrings().COUNTRY_NOT_FOUND(author.mention, param))
         return
     c_obj = countries.get(alpha_3=c_code)
+    c_str = fancy_country_string(c_obj)
     with ObDB(DbName.USERS) as users_db:
         users_db.upsert(author.id, country=c_code)
-    await ctx.send(ObStrings().COUNTRY_SET(author.mention, c_obj.flag, c_obj.name, c_obj.alpha_3))
+    await ctx.send(ObStrings().INFO_SET(author.mention, "country", c_str))
+
+
+@user.command(name="height")
+async def command_height(ctx: Context, *, param: str | None):
+    """
+    Commands for setting, checking and deleting your height.
+
+    :ob user height            Gives you your height or tells you if you haven't set it yet.
+    :ob user height [X.XXm]    Sets your height in metric units.
+    :ob user height [X'Y"]     Sets your height in imperial units.
+    :ob user height delete     Deletes your height from the database (sets it to NULL).
+    :ob user height <@id>      Gives you the height of user <@id>.
+    """
+    author = ctx.author
+    ping_id = id_from_mention(param) if is_mention(param) else None
+
+    if ping_id or not param:
+        query_id = ping_id or author.id
+        with ObDB(DbName.USERS) as users_db:
+            height = users_db.read(query_id, "height")
+        if height is None:
+            await ctx.send(
+                ObStrings().INFO_NOT_SET_OTHER_USER(mention(ping_id), "height") if ping_id else
+                ObStrings().INFO_NOT_SET(author.mention, "height"),
+                allowed_mentions=AllowedMentions(users=not ping_id)
+            )
+            return
+        await ctx.send(
+            ObStrings().INFO_PRINT_OTHER_USER(mention(ping_id), "height", f"`{height}`") if ping_id else
+            ObStrings().INFO_PRINT(author.mention, "height", f"`{height}`"),
+            allowed_mentions=AllowedMentions(users=not ping_id)
+        )
+        return
+
+    if param == "delete":
+        with ObDB(DbName.USERS) as users_db:
+            users_db.upsert(author.id, height=None)
+        await ctx.send(ObStrings().INFO_DELETE(author.mention, "height"))
+        return
+
+    metres = None
+    feet, inches = None, None
+
+    m = re.match(r'^(\d+(?:\.\d+)?)m?$', param) # literally took this straight from ChatGPT god i hate regex
+    if m:
+        metres = float(m.group(1))
+    else:
+        m = re.match(r"^(\d+)'(\d+)\"$", param)
+        if m:
+            feet, inches = map(int, m.groups())
+
+    if metres is not None:
+        feet, inches = m_to_ft(metres)
+    elif feet is not None and inches is not None:
+        metres = ft_to_m(feet, inches)
+    else:
+        await ctx.send(ObStrings().HEIGHT_WRONG_FORMAT(author.mention))
+        return
+
+    if metres > 2.5 or metres < 1.0:
+        await ctx.send(ObStrings().INVALID_HEIGHT(author.mention))
+        return
+
+    height = f"""{floor(metres * 100) / 100:.02f}m ({feet}'{inches}")"""
+    with ObDB(DbName.USERS) as users_db:
+        users_db.upsert(author.id, height=height)
+    await ctx.send(ObStrings().INFO_SET(author.mention, "height", f"`{height}`"))
