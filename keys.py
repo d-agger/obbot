@@ -2,7 +2,7 @@ import json
 import paths
 
 
-class Keys:
+class ObKeys:
     _instance = None
     _keys_dict = None
     

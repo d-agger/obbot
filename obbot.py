@@ -1,5 +1,7 @@
 import logging
 import os
+import re
+
 import discord
 from discord.ext import commands
 
@@ -14,10 +16,15 @@ obbot = commands.Bot(
     intents=obbot_intents
 )
 
+"""
+------------------------------------------------------------------------------------------------------------------------
+Events
+"""
+
 @obbot.event
 async def on_ready():
     logging.info(f"Online lol")
-    
+
 
 """
 ------------------------------------------------------------------------------------------------------------------------

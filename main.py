@@ -1,18 +1,31 @@
 import logging
-from keys import Keys
+
+# Preliminaries
+from dotenv import load_dotenv
+import paths
+load_dotenv()
+from keys import ObKeys
 import logs
 
-from dotenv import load_dotenv
-load_dotenv()
-
+# Import (and create) obbot
 from obbot import obbot
 
+# Import obbot modules
+import importlib.util as iu
+for m_file in paths.MODULES_DIR.glob("*.py"):
+    m_name = m_file.stem
+    logging.info(f"Loading module [{m_name}]...")
+    m_path = m_file.resolve()
+    spec = iu.spec_from_file_location(m_name, m_path)
+    module = iu.module_from_spec(spec)
+    spec.loader.exec_module(module)
+logging.info(f"Modules loaded.")
 
-token = Keys().OBBOT_TOKEN
-log_handler = logs.obbot_log_handler
-
+# Start obbot
+token = ObKeys().OBBOT_TOKEN
 obbot.run(
     token,
-    log_handler=log_handler,
+    log_handler=logs.obbot_log_handler,
+    log_formatter=logs.obbot_formatter,
     log_level=logging.INFO
 )

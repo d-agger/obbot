@@ -1,6 +1,8 @@
 .keys
 keys.json
-.logs
+strings.json
+.logs/
+.data/
 .vscode/
 
 

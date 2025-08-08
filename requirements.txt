@@ -1,3 +1,6 @@
 discord.py
 pydantic
 python-dotenv
+aenum
+pycountry
+country_converter
